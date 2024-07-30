@@ -1,0 +1,114 @@
+def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at each step                              
+        from databroker import Broker
+	import numpy as np
+        from scipy.optimize import minimize
+        import matplotlib.pyplot as plt
+        from bluesky.preprocessors import run_decorator
+	from ophyd.signal import EpicsSignal
+        from bluesky.plan_stubs import abs_set
+        from bluesky.callbacks.best_effort import BestEffortCallback
+
+        print("Doing knife edge laser scan on motor:", motor)
+        ljh_jet_x=EpicsSignal('XCS:LJH:JET:X')
+        labmax=EpicsSignal('XCS:LPW:01:DATA_PRI')
+
+        #RE(scan([labmax], motor, start, stop, steps)) #, per_step=num_measurements)                                       
+        positions = np.repeat(np.linspace(start,stop,steps),n)
+        #positions = [1,2,3,4,5]                                                                                           
+        print("positions",positions)
+
+        RE = RunEngine()
+        db = Broker.named('temp')
+        RE.subscribe(db.insert)
+
+        def labmax_range_scan(detector, motor, positions):
+            for pos in positions:
+		            print("pos", pos)
+                # Move motor to the next position                                                                          
+                yield from abs_set(ljh_jet_x, pos, wait=True)
+
+                # Trigger the detector and read its value                                                                  
+                yield from count([detector])
+                det_value = list(detector.read().values())[0]['value']
+
+                # Apply conditional logic based on detector value using epics.caput                                        
+                if det_value < 3e-06:
+                    # Set detector to setting A using caput (e.g., change some configuration)                              
+                    print("det_value", det_value)
+                    os.system('caput XCS:LPW:01:SETRANGE 3e-06')
+                else:
+                    # Set detector to setting B using caput (e.g., change some configuration)                              
+                    # Set labmax range                                                                                    \
+                                                                                                                           
+                    print("det_value", det_value)
+                    os.system('caput XCS:LPW:01:SETRANGE 3e-05')
+
+        
+
+                # Read the detector again after setting change                                                             
+                yield from count([detector])
+                yield from list_scan([labmax], motor, positions)
+                print("closing run")
+
+
+        print("starting the plan")
+        uids=RE(labmax_range_scan(labmax, motor, positions)) #motor                                                        
+        #print("plan completed. UID:", uid)                                                                                
+        #except Exception as e:                                                                                            
+        #    print(f"Error occurred: {e}")                                                                                 
+
+
+
+        header = db[uids]
+        h = db[-1]
+        t = h.table()
+
+        print("header.table",t)
+        print('ljh_jet_x',t['ljh_jet_x'])
+        print('det',t['XCS:LPW:01:DATA_PRI'])
+
+        #Fitting
+        def cauchy_loss(params, x, y, c):
+            A, mu, sigma = params
+            y_pred = A * np.exp(-(x - mu)**2 / (2 * sigma**2))
+            residual = y - y_pred
+            return np.log(1 + (residual / c)**2).sum()
+
+        # Function to define the Gaussian function for curve fitting                                                       
+        def gauss(params, x):
+            A, mu, sigma = params
+            return A * np.exp(-(x - mu)**2 / (2 * sigma**2))
+
+        # Objective function for optimization                                                                              
+        def objective(params, x, y, c):
+            return cauchy_loss(params, x, y, c)
+
+        # Initial guess for parameters                                                                                     
+        initial_guess = [0.01, np.mean(t['ljh_jet_x']), 0.001*guess]
+
+        print("initial guess", initial_guess)
+
+        power = t['XCS:LPW:01:DATA_PRI']
+        position = t['ljh_jet_x']
+
+        # Perform optimization                                                                                             
+        #result = minimize(objective, initial_guess, args=(power_arr, pos_arr, 1))                                         
+        result = minimize(objective, initial_guess, args=(t['ljh_jet_x'], t['XCS:LPW:01:DATA_PRI'], 1))
+
+        # Extract optimized parameters                                                                                     
+        popt = result.x
+        #print("popt", popt)                                                                                               
+
+        # Calculating the full width at half maximum (FWHM)                                                                
+        FWHM = 2 * np.sqrt(2 * np.log(2)) * popt[2]
+        print("The FWHM is:", FWHM*1000, "um")
+
+        # Plotting the data and the fit                                                                                    
+        fig2 = plt.figure("Knife Edge Scan")
+        plt.plot(t['ljh_jet_x'], t['XCS:LPW:01:DATA_PRI'], 'b.', label='Measurement Data')
+        plt.plot(t['ljh_jet_x'], gauss(popt, t['ljh_jet_x']), 'r-', label='Gaussian Fit')
+        plt.xlabel('Position [mm]')
+        plt.ylabel('Intensity [J]')
+	      plt.title('Edge Profile with Gaussian Fit (robust, Cauchy loss)')
+        plt.legend()
+        plt.show()
