@@ -7,6 +7,9 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
 	from ophyd.signal import EpicsSignal
         from bluesky.plan_stubs import abs_set
         from bluesky.callbacks.best_effort import BestEffortCallback
+	from scipy import special
+        from scipy.optimize import curve_fit
+        from scipy.special import erfc
 
         print("Doing knife edge laser scan on motor:", motor)
         ljh_jet_x=EpicsSignal('XCS:LJH:JET:X')
@@ -67,6 +70,9 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         print('ljh_jet_x',t['ljh_jet_x'])
         print('det',t['XCS:LPW:01:DATA_PRI'])
 
+	power = t['XCS:LPW:01:DATA_PRI']
+        position = t['ljh_jet_x']
+	
         #Fitting
         def cauchy_loss(params, x, y, c):
             A, mu, sigma = params
@@ -83,13 +89,66 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         def objective(params, x, y, c):
             return cauchy_loss(params, x, y, c)
 
-        # Initial guess for parameters                                                                                     
+	#Error function                                                                                                                                                          
+        def error_function(x, a, b, c, d):
+            #a,b,c,d = params                                                                                                                                                    
+            return a * special.erfc(b * (x - c)) + d
+
+
+        # Step 1: Create a dictionary to collect y values for each x                                                                                                             
+        xy_dict = {}
+
+        # Step 2: Populate the dictionary                                                                                                                                        
+        for x, y in zip(position, power):
+            if x not in xy_dict:
+                xy_dict[x] = []
+            xy_dict[x].append(y)
+
+        # Step 3: Compute the averages                                                                                                                                           
+        x_unique = []
+        y_avg = []
+
+        for x in sorted(xy_dict.keys()):  # Sort keys to maintain order                                                                                                          
+            x_unique.append(x)
+            y_avg.append(np.mean(xy_dict[x]))
+
+	# Convert lists to numpy arrays (optional)                                                                                                                               
+        pos_unique = np.array(x_unique)
+
+        int_avg = np.array(y_avg)
+
+        # Print the results                                                                                                                                                      
+        print("Unique x values:", pos_unique)
+        print("Averaged y values:", int_avg)
+
+        # Fit the data to the error function model                                                                                                                               
+        initial_guess_erf = [(min(int_avg)-max(int_avg))/2, 2/(min(int_avg)-max(int_avg)), np.mean(pos_unique), max(int_avg)]
+        params_erf, covariance = curve_fit(error_function, pos_unique, int_avg, p0=initial_guess_erf)
+        print("initial guess", initial_guess_erf)
+
+        # Plot the original data and the fitted curve                                                                                                                            
+        plt.scatter(pos_unique, int_avg, label='Data')
+        plt.plot(position, error_function(x_data, *params), color='red', label='Fitted curve')
+        plt.legend()
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Fitting Data with Error Function')
+        plt.show()
+
+        print("Fitted parameters (a, b, c, d):", params_erf)
+
+
+        FWHM_erf = (2*np.sqrt(2*np.log(2)))/params_erf[1]
+        print(2*np.sqrt(2*np.log(2)))
+        print("b", params_erf[1])
+        print("Erf FWHM", FWHM_erf)
+
+        # Initial guess for Gaussian parameters                                                                                     
         initial_guess = [0.01, np.mean(t['ljh_jet_x']), 0.001*guess]
 
         print("initial guess", initial_guess)
 
-        power = t['XCS:LPW:01:DATA_PRI']
-        position = t['ljh_jet_x']
+        
 
         # Perform optimization                                                                                             
         #result = minimize(objective, initial_guess, args=(power_arr, pos_arr, 1))                                         
