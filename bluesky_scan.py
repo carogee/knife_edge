@@ -128,7 +128,7 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
 
         # Plot the original data and the fitted curve                                                                                                                            
         plt.scatter(pos_unique, int_avg, label='Data')
-        plt.plot(position, error_function(position, *params), color='red', label='Fitted curve')
+        plt.plot(position, error_function(position, *params_erf), color='red', label='Fitted curve')
         plt.legend()
         plt.xlabel('position')
         plt.ylabel('power')
