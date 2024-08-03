@@ -24,9 +24,11 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         db = Broker.named('temp')
         RE.subscribe(db.insert)
 
+	det_arr = []
+	
         def labmax_range_scan(detector, motor, positions):
             for pos in positions:
-		            print("pos", pos)
+		print("pos", pos)
                 # Move motor to the next position                                                                          
                 yield from abs_set(ljh_jet_x, pos, wait=True)
 
@@ -49,9 +51,14 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         
 
                 # Read the detector again after setting change                                                             
-                yield from count([detector])
-                yield from list_scan([labmax], motor, positions)
-                print("closing run")
+                print("reading detector again after setting change")
+                yield from count([detector],num=1,delay=1)
+                det_value = list(detector.read().values())[0]['value']
+                print("det valued read", det_value)
+                det_arr.append(det_value)
+                print("appended values")
+            yield from list_scan([labmax], motor, positions)
+            print("closing run")
 
 
         print("starting the plan")
@@ -70,7 +77,7 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         print('ljh_jet_x',t['ljh_jet_x'])
         print('det',t['XCS:LPW:01:DATA_PRI'])
 
-	power = t['XCS:LPW:01:DATA_PRI']
+	power = det_arr
         position = t['ljh_jet_x']
 	
         #Fitting
