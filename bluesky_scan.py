@@ -128,6 +128,13 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         print("Unique x values:", pos_unique)
         print("Averaged y values:", int_avg)
 
+	#save the data in a file
+	combined_array = np.column_stack((pos_unique,int_avg))
+
+	folder_path = '/cds/group/xcs/knife_edge'
+	file_path = os.path.join(folder_path, 'my_data.dat')
+	np.savetxt(file_path, combined_array, delimiter=' ', fmt='%.4f')
+
         # Fit the data to the error function model                                                                                                                               
         initial_guess_erf = [(min(int_avg)-max(int_avg))/2, 2/(min(int_avg)-max(int_avg)), np.mean(pos_unique), max(int_avg)]
         params_erf, covariance = curve_fit(error_function, pos_unique, int_avg, p0=initial_guess_erf)
