@@ -80,108 +80,96 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
 	power = det_arr
         position = t['ljh_jet_x']
 	
-        #Fitting
-        def cauchy_loss(params, x, y, c):
-            A, mu, sigma = params
-            y_pred = A * np.exp(-(x - mu)**2 / (2 * sigma**2))
-            residual = y - y_pred
-            return np.log(1 + (residual / c)**2).sum()
-
-        # Function to define the Gaussian function for curve fitting                                                       
-        def gauss(params, x):
-            A, mu, sigma = params
-            return A * np.exp(-(x - mu)**2 / (2 * sigma**2))
-
-        # Objective function for optimization                                                                              
-        def objective(params, x, y, c):
-            return cauchy_loss(params, x, y, c)
-
-	#Error function                                                                                                                                                          
+        #Error function                                                                                                                                                                    
         def error_function(x, a, b, c, d):
-            #a,b,c,d = params                                                                                                                                                    
+            #a,b,c,d = params                                                                                                                                                              
             return a * special.erfc(b * (x - c)) + d
 
 
-        # Step 1: Create a dictionary to collect y values for each x                                                                                                             
+        # Step 1: Create a dictionary to collect y values for each x                                                                                                                       
         xy_dict = {}
 
-        # Step 2: Populate the dictionary                                                                                                                                        
+        # Step 2: Populate the dictionary                                                                                                                                                  
         for x, y in zip(position, power):
             if x not in xy_dict:
                 xy_dict[x] = []
             xy_dict[x].append(y)
 
-        # Step 3: Compute the averages                                                                                                                                           
+        # Step 3: Compute the averages                                                                                                                                                     
         x_unique = []
         y_avg = []
 
-        for x in sorted(xy_dict.keys()):  # Sort keys to maintain order                                                                                                          
+	for x in sorted(xy_dict.keys()):  # Sort keys to maintain order                                                                                                                    
             x_unique.append(x)
             y_avg.append(np.mean(xy_dict[x]))
 
-	# Convert lists to numpy arrays (optional)                                                                                                                               
+
+
+        # Convert lists to numpy arrays (optional)                                                                                                                                         
         pos_unique = np.array(x_unique)
 
         int_avg = np.array(y_avg)
 
-        # Print the results                                                                                                                                                      
+        # Print the results                                                                                                                                                                
         print("Unique x values:", pos_unique)
         print("Averaged y values:", int_avg)
 
-	#save the data in a file
-	combined_array = np.column_stack((pos_unique,int_avg))
-
-	folder_path = '/cds/group/xcs/knife_edge'
-	file_path = os.path.join(folder_path, 'my_data.dat')
-	np.savetxt(file_path, combined_array, delimiter=' ', fmt='%.4f')
-
-        # Fit the data to the error function model                                                                                                                               
+        # Fit the data to the error function model                                                                                                                                         
         initial_guess_erf = [(min(int_avg)-max(int_avg))/2, 2/(min(int_avg)-max(int_avg)), np.mean(pos_unique), max(int_avg)]
         params_erf, covariance = curve_fit(error_function, pos_unique, int_avg, p0=initial_guess_erf)
         print("initial guess", initial_guess_erf)
 
-        # Plot the original data and the fitted curve                                                                                                                            
+        # Plot the original data and the fitted curve                                                                                                                                      
         plt.scatter(pos_unique, int_avg, label='Data')
-        plt.plot(position, error_function(position, *params_erf), color='red', label='Fitted curve')
+        plt.plot(position, error_function(position, *params_erf), color='red', label='Error Function Fit')
         plt.legend()
-        plt.xlabel('position')
-        plt.ylabel('power')
-        plt.title('Fitting Data with Error Function')
-        plt.show()
+        plt.xlabel('position [mm]')
+        plt.ylabel('power [au]')
+        plt.title('Knife Edge Scan')
 
-        print("Fitted parameters (a, b, c, d):", params_erf)
+	# Extrapolating                                                                                                                                                                    
+        x_interp = np.linspace(np.min(pos_unique), np.max(pos_unique), num=100)
+        y_interp = error_function(x_interp,*params_erf)
 
 
-        FWHM_erf = (2*np.sqrt(2*np.log(2)))/params_erf[1]
-        print(2*np.sqrt(2*np.log(2)))
-        print("b", params_erf[1])
-        print("Erf FWHM", FWHM_erf)
+        # take derivative                                                                                                                                                                  
+        dy = -np.diff(y_interp)
+        dx = x_interp[:len(dy)]
+        #plt.plot(dx, dy, 'o', label='derivative')                                                                                                                                         
 
-        # Initial guess for Gaussian parameters                                                                                     
-        initial_guess = [0.01, np.mean(t['ljh_jet_x']), 0.001*guess]
 
-        print("initial guess", initial_guess)
+        # define and fit gaussian and plot                                                                                                                                                 
+	def gauss(x, y0, A, x0, sigma):
+            return y0 + A*np.exp(-(x-x0)**2/(2*sigma**2))
 
-        
+        #guess = [0, 0.03, 0.15, 0.01]                                                                                                                                                     
+        guess = [0, np.max(dy),((np.max(dx)-np.min(dx))/2), 0.08]
 
-        # Perform optimization                                                                                             
-        #result = minimize(objective, initial_guess, args=(power_arr, pos_arr, 1))                                         
-        result = minimize(objective, initial_guess, args=(t['ljh_jet_x'], t['XCS:LPW:01:DATA_PRI'], 1))
+        popt, pcov = curve_fit(gauss, dx, dy, p0=guess)
+        FWHM = 1000*2*np.sqrt(2*np.log(2))*(popt[3])
+        print("FWHM =",1000*2*np.sqrt(2*np.log(2))*(popt[3]),"um")
 
-        # Extract optimized parameters                                                                                     
-        popt = result.x
-        #print("popt", popt)                                                                                               
-
-        # Calculating the full width at half maximum (FWHM)                                                                
-        FWHM = 2 * np.sqrt(2 * np.log(2)) * popt[2]
-        print("The FWHM is:", FWHM*1000, "um")
-
-        # Plotting the data and the fit                                                                                    
-        fig2 = plt.figure("Knife Edge Scan")
-        plt.plot(t['ljh_jet_x'], t['XCS:LPW:01:DATA_PRI'], 'b.', label='Measurement Data')
-        plt.plot(t['ljh_jet_x'], gauss(popt, t['ljh_jet_x']), 'r-', label='Gaussian Fit')
-        plt.xlabel('Position [mm]')
-        plt.ylabel('Intensity [J]')
-	      plt.title('Edge Profile with Gaussian Fit (robust, Cauchy loss)')
+        plt.plot(dx,(1/np.max(abs(dy)))*gauss(dx,*popt),label='Fitted Gaussian', color='orange')
         plt.legend()
+
+
+        #save the data in a file                                                                                                                                                           
+        fwhm=np.full(shape=len(x_unique), fill_value=FWHM, dtype=np.float64)
+        print("fwhm",fwhm)
+
+        combined_array = np.column_stack((x_unique,y_avg,fwhm)
+
+	# datetime object containing current date and time                                                                                                                                 
+        now = datetime.now()
+        dt_string = now.strftime("%Y%m%d_%H:%M")
+
+        folder_path = '/cds/group/xcs/laser/'
+        file_path = os.path.join(folder_path, dt_string+'.dat')
+        plot_path = os.path.join(folder_path, dt_string+'_plot.png')
+        np.savetxt(file_path, combined_array, delimiter=' ', fmt='%.8f')
+
+        plt.savefig(plot_path, format="png")
         plt.show()
+        print("Data/Plots saved to /cds/group/xcs/laser/")
+
+	
