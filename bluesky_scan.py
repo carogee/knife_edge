@@ -155,7 +155,7 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
 
         #save the data in a file                                                                                                                                                           
         fwhm=np.full(shape=len(x_unique), fill_value=FWHM, dtype=np.float64)
-        print("fwhm",fwhm)
+        #print("fwhm",fwhm)
 
         combined_array = np.column_stack((x_unique,y_avg,fwhm)
 
