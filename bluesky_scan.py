@@ -38,12 +38,12 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
 
                 # Apply conditional logic based on detector value using epics.caput                                        
                 if det_value < 3e-06:
-                    # Set detector to setting A using caput (e.g., change some configuration)                              
+                    # Set detector to setting A using caput                             
                     print("det_value", det_value)
                     os.system('caput XCS:LPW:01:SETRANGE 3e-06')
-                else:
-                    # Set detector to setting B using caput (e.g., change some configuration)                              
-                    # Set labmax range                                                                                    \
+		elif det_value >= 3e-06:
+                    # Set detector to setting B using caput                               
+                    # Set labmax range                                                                                    
                                                                                                                            
                     print("det_value", det_value)
                     os.system('caput XCS:LPW:01:SETRANGE 3e-05')
@@ -111,8 +111,8 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         int_avg = np.array(y_avg)
 
         # Print the results                                                                                                                                                                
-        print("Unique x values:", pos_unique)
-        print("Averaged y values:", int_avg)
+        print("Unique x values:", *pos_unique, sep=", ")
+        print("Averaged y values:", *int_avg, sep=", ")
 
         # Fit the data to the error function model                                                                                                                                         
         initial_guess_erf = [(min(int_avg)-max(int_avg))/2, 2/(min(int_avg)-max(int_avg)), np.mean(pos_unique), max(int_avg)]
