@@ -166,8 +166,15 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
         folder_path = '/cds/group/xcs/laser/'
         file_path = os.path.join(folder_path, dt_string+'.dat')
         plot_path = os.path.join(folder_path, dt_string+'_plot.png')
+	
         np.savetxt(file_path, combined_array, delimiter=' ', fmt='%.8f')
 
+	txt_path = os.path.join(folder_path, dt_string+'.txt')
+	with open(txt_path, 'w') as f:
+            # Convert arrays to strings and join with commas                                                  
+            f.write(','.join(map(str, pos_unique)) + '\n')  # First array                                     
+            f.write(','.join(map(str, int_avg)) + '\n')  # Second array  
+	
         plt.savefig(plot_path, format="png")
         plt.show()
         print("Data/Plots saved to /cds/group/xcs/laser/")
