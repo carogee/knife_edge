@@ -79,6 +79,10 @@ def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at 
 
 	power = det_arr
         position = t['ljh_jet_x']
+
+	#remove first 2 and last 2 data points which are sometime anomolous
+	power = power[2:-2]
+	position = position[2:-2]
 	
         #Error function                                                                                                                                                                    
         def error_function(x, a, b, c, d):
